@@ -1,0 +1,121 @@
+---
+title: "ML_Project"
+author: "Shaoman Yin"
+date: "Saturday, May 16, 2015"
+output: html_document
+---
+
+load package:
+```{r}
+library(lattice)
+library(ggplot2)
+library(caret)
+library(rpart)
+library(mlbench)
+library(randomForest)
+library(e1071)
+library(foreach)
+library(doParallel)
+```
+
+
+load data:
+```{r}
+setwd("C:/Users/T400/Desktop/DataSci/Machine Learning Projects/")
+start<-read.csv("pml-training.csv",na.strings=c("#DIV/0!"))
+final<-read.csv("pml-testing.csv",na.strings=c("#DIV/0!"))
+```
+
+
+only keep numeric/integer variables as predicators 
+```{r}
+want<-numeric()
+for (i in 1:ncol(start)) {
+  if (class(start[,i])=="factor") {want[i]=0}
+  else (want[i]=1)
+}
+numvar<-names(start[want==1])
+prevars<-numvar[-c(1:4)]
+modelset<-start[,c(prevars,"classe")]
+```
+
+exclude highly correlated predicators
+```{r}
+a<-colSums(is.na(modelset))==0
+modelset2<-modelset[,a]
+cor<-cor(modelset2[,-53])
+higcor<-findCorrelation(cor,0.9)
+modelset3<-modelset2[,-higcor]
+```
+
+transform all predicator as numeric variables
+```{r}
+for (i in 1:ncol(modelset3[,-46])) {
+  modelset3[,i]<-as.numeric(modelset3[,i])
+}
+```
+
+
+data slicing with training and testing sets
+```{r}
+intrain<-createDataPartition(y=modelset3$classe,p=0.75,list=F)
+training<-modelset3[intrain,]
+testing<-modelset3[-intrain,]
+prop.table(table(training$classe))
+prop.table(table(testing$classe))
+```
+
+
+
+establish predicative model using random forest and cross-validated with testing data
+```{r} 
+set.seed(1234)
+registerDoParallel()
+x <- training[-46]
+y <- training$classe
+
+rf <- foreach(ntree=rep(15, 6), .combine=randomForest::combine, .packages='randomForest') %dopar% {
+  randomForest(x, y, ntree=ntree) 
+}
+varImpPlot(rf)
+prerf<-predict(rf,testing)
+confusionMatrix(prerf,testing$classe)
+```
+
+
+
+further evaluated with the 20 questions 
+```{r}
+
+subm= function(x){
+  n = length(x)
+  for(i in 1:n){
+    filename = paste0("problem_id_",i,".txt")
+    write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+  }
+}
+
+fprevar<-names(training)
+finaltest<-final[fprevar[fprevar!='classe']]
+answers <- predict(rf, finaltest)
+answers
+subm(answers)
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
